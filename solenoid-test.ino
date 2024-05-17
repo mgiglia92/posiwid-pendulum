@@ -45,8 +45,8 @@ float wDesired, thetaDesired, wActual, thetaActual;
 state_t state;
 
 // IR PHOTO DIODE THRESHOLDS
-int high_thresh = 575;
-int low_thresh = 500;
+int high_thresh = 625;
+int low_thresh = 600;
 
 // Solenoid vars
 unsigned long sol_on_time=0;
@@ -151,7 +151,7 @@ void loop() {
       case DETECTED:
         swing_count++;
         state = WAITFALL;
-        if(count <= -3300){ swing_count = 0; }
+        if(count <= -3000){ swing_count = 0; }
         break; 
       case WAITFALL:
         if(analogRead(0) < low_thresh){ state =IDLE; }
@@ -174,7 +174,7 @@ void loop() {
       break;
     case SOL_ON:
       digitalWrite(SOL_PIN, HIGH);
-      if(cur - sol_on_time >= 250000) { sol_state = SOL_OFF; }
+      if(cur - sol_on_time >= 350000) { sol_state = SOL_OFF; }
       break;
     case SOL_OFF:
       digitalWrite(SOL_PIN, LOW);
