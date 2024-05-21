@@ -12,6 +12,7 @@ typedef enum{
   IDLE,
   RISE,
   WAITFALL,
+  DWELL,
   DETECTED,
   FALL,
 }state_t;
@@ -32,7 +33,7 @@ PID_control c0, c1, c2, c3, c4;
 Differentiator wheeldiff(0.01, 1 / (omegaBandwidth * 2 * PI));
 Differentiator acceldiff(0.01, 1 / (alphaBandwidth * 2 * PI));
 
-unsigned long cur, prev, prevsm;
+unsigned long cur, prev, prevsm, prevmotor;
 unsigned long dt = 10000;
 unsigned long debounce_dt = 10000;
 int counter = 0;
@@ -45,8 +46,8 @@ float wDesired, thetaDesired, wActual, thetaActual;
 state_t state;
 
 // IR PHOTO DIODE THRESHOLDS
-int high_thresh = 625;
-int low_thresh = 600;
+int high_thresh = 700;
+int low_thresh = 650;
 
 // Solenoid vars
 unsigned long sol_on_time=0;
@@ -59,6 +60,7 @@ void setup() {
   state = IDLE;
   Serial.begin(115200);
   pinMode(SOL_PIN, OUTPUT);
+  
   digitalWrite(SOL_PIN, LOW);
   // put your setup code here, to run once:
 //  imu.begin();
@@ -150,9 +152,13 @@ void loop() {
         break;
       case DETECTED:
         swing_count++;
-        state = WAITFALL;
+        state = DWELL;
+        prevmotor=micros();
         if(count <= -3000){ swing_count = 0; }
-        break; 
+        break;
+      case DWELL:
+        if(cur - prevmotor >= debounce_dt){state = WAITFALL;}
+        break;
       case WAITFALL:
         if(analogRead(0) < low_thresh){ state =IDLE; }
     }
