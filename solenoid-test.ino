@@ -24,6 +24,8 @@ typedef enum{
   LOW_A1,
   SOL_ON,
   SOL_OFF,
+  RANDOM_SWING_ON,
+  RANDOM_SWING_OFF
 } solenoid_state_t;
 
 SerialComms comms;
@@ -33,7 +35,7 @@ PID_control c0, c1, c2, c3, c4;
 Differentiator wheeldiff(0.01, 1 / (omegaBandwidth * 2 * PI));
 Differentiator acceldiff(0.01, 1 / (alphaBandwidth * 2 * PI));
 
-unsigned long cur, prev, prevsm, prevmotor;
+unsigned long cur, prev, prevsm, prevmotor, prev_sol, random_sol_time;
 unsigned long dt = 10000;
 unsigned long debounce_dt = 10000;
 int counter = 0;
@@ -41,6 +43,7 @@ bool flip = false;
 float power, thrusterPower;
 int pwm, thrusterPwm;
 int32_t count = 0;
+int32_t random_swing_count = 0;
 float N = 1000;
 float wDesired, thetaDesired, wActual, thetaActual;
 state_t state;
@@ -168,23 +171,42 @@ void loop() {
   {
     case WAIT_A0:
       if(analogRead(A0) < low_thresh)  { sol_state = LOW_A0; }
+      if(cur - prev_sol >= 5000000) { random_swing_count = 0; sol_state = RANDOM_SWING_ON; random_sol_time = micros();}
       break;
     case LOW_A0:
       if(analogRead(A0) >= high_thresh) { sol_state= WAIT_A1; }
+      if(cur - prev_sol >= 5000000) { random_swing_count = 0; sol_state = RANDOM_SWING_ON; random_sol_time = micros();}
       break;
     case WAIT_A1:
       if(analogRead(A1) < low_thresh) { sol_state= LOW_A1; }
+      if(cur - prev_sol >= 5000000) { random_swing_count = 0; sol_state = RANDOM_SWING_ON; random_sol_time = micros();}
       break;
     case LOW_A1:
       if(analogRead(A1) >= high_thresh){ sol_state = SOL_ON; sol_on_time = micros(); }
+      if(cur - prev_sol >= 5000000) { random_swing_count = 0; sol_state = RANDOM_SWING_ON; random_sol_time = micros();}
       break;
     case SOL_ON:
       digitalWrite(SOL_PIN, HIGH);
       if(cur - sol_on_time >= 350000) { sol_state = SOL_OFF; }
+      prev_sol = micros();
       break;
     case SOL_OFF:
       digitalWrite(SOL_PIN, LOW);
       sol_state= WAIT_A0;
+      break;
+    case RANDOM_SWING_ON:
+      digitalWrite(SOL_PIN, HIGH);
+      if(cur - random_sol_time >= (unsigned long)get_pendulum_period()/2) { sol_state = RANDOM_SWING_OFF; }
+      break;
+    case RANDOM_SWING_OFF:
+      digitalWrite(SOL_PIN, LOW);
+      if(random_swing_count >= 10) { sol_state = WAIT_A0; prev_sol = micros(); break;}
+      if(cur - random_sol_time >= get_pendulum_period()){ 
+        swing_count = 50; 
+        sol_state = RANDOM_SWING_ON;
+        random_sol_time = micros();
+        random_swing_count++;
+      }
       break;
   }
 
@@ -193,6 +215,18 @@ void loop() {
   thrusterPwm = int(thrusterPower * 255 / 7.5);
   rawMotorCtrl(constrain(pwm, -255, 255), 0);
 
+}
+
+unsigned long get_pendulum_period()
+{
+  // Convert count into normalized length of pendulum (0-1) 1 being longest
+  float norm_len = ((float)count/3000) + 1.0; 
+
+  // Estimate the pendulum swinging period
+  float period = (1.514-0.782)*norm_len + 0.782;
+
+  // Get period in us and return
+  return (unsigned long)(period*1000000.0);
 }
 
 void doA()
